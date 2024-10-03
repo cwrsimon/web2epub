@@ -1,0 +1,36 @@
+body {
+    font-family: serif;
+}
+
+code {
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 80%;
+}
+
+table {
+    border-collapse: collapse;
+    page-break-after:auto;
+    page-break-inside:avoid;    
+}
+
+table, th, td {
+   border: 1px solid black;
+}
+
+th, td {
+    padding: 5px;
+    text-align: left;
+    page-break-inside:avoid;
+    page-break-after:auto
+}
+
+img {
+  max-width: 80%;
+  max-height: 80%; }
+  
+blockquote {
+    border-top: 1px solid black;
+    border-bottom: 1px solid black;
+}
+  

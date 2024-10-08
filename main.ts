@@ -31,7 +31,7 @@ export function extractDocId(url: string): string {
   ).replaceAll(":", "");
 }
 
-export async function fileExists(path: string): Promise<boolean> {
+async function fileExists(path: string): Promise<boolean> {
   try {
     await Deno.lstat(path);
     return true;
@@ -55,8 +55,6 @@ async function createDir(dirname: string): Promise<boolean> {
   }
 }
 
-//async function generateMetadata(worddir)
-
 async function generateEpub(workdir: string, docId: string): Promise<boolean> {
   const cmd = new Deno.Command("pandoc", {
     args: [
@@ -78,11 +76,26 @@ async function generateEpub(workdir: string, docId: string): Promise<boolean> {
     ],
   });
 
-  let { code, stdout, stderr } = await cmd.output();
-  // stdout & stderr are a Uint8Array
+  const { code, stdout, stderr } = await cmd.output();
   console.log(new TextDecoder().decode(stdout)); // hello world
   console.log(new TextDecoder().decode(stderr)); // hello world
   return true;
+}
+
+async function fetchContent(workDir: string) {
+  const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
+
+  const contentPresent = await fileExists(rawContentFile);
+  if (contentPresent) {
+    console.log(RAW_HTML_FILENAME + " exists, nothing to do.");
+    return;
+  }
+
+  const textResponse = await fetch(url);
+  const body = await textResponse.body;
+  if (body != null) {
+    await Deno.writeFile(rawContentFile, body);
+  }
 }
 
 async function parseDocument(workDir: string): Promise<ParseResult | null> {
@@ -132,20 +145,23 @@ async function generateContent(parseResult: ParseResult, url: string) {
   await Deno.writeFile(extractedContentFile, bytes);
 }
 
-const url =
-  "https://dzone.com/articles/java-11-to-21-a-visual-guide-for-seamless-migratio";
+// const url =
+//   "https://dzone.com/articles/java-11-to-21-a-visual-guide-for-seamless-migratio";
 
-// TODO Wenn es nicht existiert, dann per Curl herunterladen ...
+const url =
+  "https://dzone.com/articles/server-side-rendering-with-spring-boot";
+
 createDir("epubs");
 createDir("workspaces");
 const docId = extractDocId(url);
 const workDir = path.join("workspaces", docId);
 createDir(workDir);
 
+await fetchContent(workDir);
+
 const result = await parseDocument(workDir);
 if (result != null) {
   generateContent(result, url);
-  // TODO Extract Metadta
   generateMetadata(result);
   await generateEpub(workDir, docId);
 }
@@ -165,5 +181,3 @@ if (result != null) {
 
 //   console.log("Add 2 + 3 =", add(2, 3));
 // }
-// Pandoc execution
-// pandoc -f html -t epub2 dzone-readability-content.html --metadata title="My Title" --epub-title-page=false   -o bla.epub

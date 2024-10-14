@@ -1,4 +1,5 @@
 import * as path from "jsr:@std/path";
+import { readAll } from "jsr:@std/io";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 import { stringify } from "jsr:@std/yaml";
@@ -18,6 +19,7 @@ type ParseResult = {
 
 const EXTRACTED_HTML_FILENAME = "extracted.html";
 const RAW_HTML_FILENAME = "document-raw.html";
+const RAW_METADATA_FILENAME = "metadata-raw.yaml";
 
 export function extractDocId(url: string): string {
   const parseResult = URL.parse(url);
@@ -82,7 +84,7 @@ async function generateEpub(workdir: string, docId: string): Promise<boolean> {
   return true;
 }
 
-async function fetchContent(workDir: string) {
+async function fetchContent(workDir: string, url: string) {
   const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
 
   const contentPresent = await fileExists(rawContentFile);
@@ -98,7 +100,10 @@ async function fetchContent(workDir: string) {
   }
 }
 
-async function parseDocument(workDir: string): Promise<ParseResult | null> {
+async function parseDocument(
+  workDir: string,
+  url: string,
+): Promise<ParseResult | null> {
   const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
   const rawContent = await Deno.readTextFile(rawContentFile);
 
@@ -109,8 +114,9 @@ async function parseDocument(workDir: string): Promise<ParseResult | null> {
   return reader.parse();
 }
 
-async function generateMetadata(parseResult: ParseResult) {
+async function generateMetadata(workDir: string, parseResult: ParseResult) {
   const metadata = {
+    author: parseResult?.byline,
     title: parseResult?.title,
     date: parseResult?.publishedTime,
     lang: parseResult?.lang,
@@ -119,11 +125,22 @@ async function generateMetadata(parseResult: ParseResult) {
   const encoder = new TextEncoder();
   const bytes = encoder.encode(stringify(metadata));
   const metadataFile = path.join(workDir, "metadata.yaml");
-
   await Deno.writeFile(metadataFile, bytes);
-}
 
-async function generateContent(parseResult: ParseResult, url: string) {
+  delete parseResult?.content;
+  delete parseResult?.textContent;
+
+  const rawMetadataBytes = encoder.encode(stringify(parseResult));
+  const rawMetadataFile = path.join(workDir, RAW_METADATA_FILENAME);
+  await Deno.writeFile(rawMetadataFile, rawMetadataBytes);
+  
+}  
+
+async function generateContent(
+  workDir: string,
+  url: string,
+  parseResult: ParseResult,
+) {
   // const title = parseResult?.title;
   const description = parseResult?.excerpt;
   const content = parseResult?.content;
@@ -135,7 +152,8 @@ async function generateContent(parseResult: ParseResult, url: string) {
   if (content) {
     htmlContent = htmlContent + content;
   }
-  htmlContent = htmlContent + '<p>Source: <a href="' + url + ' ">' + url + '</a></p>';
+  htmlContent = htmlContent + '<p>Source: <a href="' + url + ' ">' + url +
+    "</a></p>";
 
   const extractedContentFile = path.join(workDir, EXTRACTED_HTML_FILENAME);
 
@@ -148,36 +166,45 @@ async function generateContent(parseResult: ParseResult, url: string) {
 // const url =
 //   "https://dzone.com/articles/java-11-to-21-a-visual-guide-for-seamless-migratio";
 
-const url =
-  "https://dzone.com/articles/server-side-rendering-with-spring-boot";
+// const url =
+//   "https://dzone.com/articles/server-side-rendering-with-spring-boot";
 
-createDir("epubs");
-createDir("workspaces");
-const docId = extractDocId(url);
-const workDir = path.join("workspaces", docId);
-createDir(workDir);
+async function createEpub(url: string) {
+  console.log("Create epub for %s", url);
 
-await fetchContent(workDir);
+  createDir("epubs");
+  createDir("workspaces");
+  const docId = extractDocId(url);
+  const workDir = path.join("workspaces", docId);
+  createDir(workDir);
 
-const result = await parseDocument(workDir);
-if (result != null) {
-  generateContent(result, url);
-  generateMetadata(result);
-  await generateEpub(workDir, docId);
+  await fetchContent(workDir, url);
+
+  const result = await parseDocument(workDir, url);
+  if (result != null) {
+    generateContent(workDir, url, result);
+    generateMetadata(workDir, result);
+    await generateEpub(workDir, docId);
+  }
 }
 
-// fs.writeFileSync(prefix + "content-readability.html", article.content);
-// delete article.content;
-// delete article.textContent;
-// fs.writeFileSync(prefix + "metadata-readability.json" , JSON.stringify(article));
-
-// // Learn more at https://docs.deno.com/runtime/manual/examples/module_metadata#concepts
-// if (import.meta.main) {
-//   const s1: number = 5;
-//   const s2 = "Hallo";
-//   const sum: number = s1 + s2;
-//   console.log(Deno.args);
-//   console.log(!sum);
-
-//   console.log("Add 2 + 3 =", add(2, 3));
-// }
+if (import.meta.main && Deno.args.length > 0) {
+  // TODO Validate url
+  const url = Deno.args.at(0);
+  if (url) {
+    await createEpub(url);
+  }
+}
+if (import.meta.main && Deno.args.length == 0) {
+  const stdinContent = await readAll(Deno.stdin);
+  const response = new TextDecoder().decode(stdinContent).split("\n");
+  for (const line of response) {
+    if (line) {
+      await createEpub(line);
+    }
+  }
+  // response.forEach(async (line) => {
+    
+  // });
+  //response.forEach( line -> );
+}

@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno --allow-read run --allow-read --allow-env --allow-write --allow-run --allow-net main.ts"
+    "dev": "deno  run --allow-read --allow-env --allow-write --allow-run --allow-net main.ts"
   },
   "imports": {
     "@mozilla/readability": "npm:@mozilla/readability@^0.5.0",

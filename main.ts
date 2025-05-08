@@ -133,8 +133,7 @@ async function generateMetadata(workDir: string, parseResult: ParseResult) {
   const rawMetadataBytes = encoder.encode(stringify(parseResult));
   const rawMetadataFile = path.join(workDir, RAW_METADATA_FILENAME);
   await Deno.writeFile(rawMetadataFile, rawMetadataBytes);
-  
-}  
+}
 
 async function generateContent(
   workDir: string,
@@ -204,7 +203,7 @@ if (import.meta.main && Deno.args.length == 0) {
     }
   }
   // response.forEach(async (line) => {
-    
+
   // });
   //response.forEach( line -> );
 }

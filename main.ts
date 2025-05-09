@@ -3,6 +3,8 @@ import { readAll } from "jsr:@std/io";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 import { stringify } from "jsr:@std/yaml";
+import {Builder} from "selenium-webdriver";
+import * as firefox from "selenium-webdriver/firefox";
 
 type ParseResult = {
   title: string;
@@ -84,12 +86,19 @@ async function generateEpub(workdir: string, docId: string): Promise<boolean> {
   return true;
 }
 
-async function fetchContent(workDir: string, url: string) {
+async function fetchContent(workDir: string, url: string, firefox: boolean) {
   const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
 
   const contentPresent = await fileExists(rawContentFile);
   if (contentPresent) {
     console.log(RAW_HTML_FILENAME + " exists, nothing to do.");
+    return;
+  }
+  if (firefox) {
+    const body = await callFirefox(url);
+    const encoder = new TextEncoder(); 
+      await Deno.writeFile(rawContentFile, encoder.encode(body));
+
     return;
   }
 
@@ -162,12 +171,6 @@ async function generateContent(
   await Deno.writeFile(extractedContentFile, bytes);
 }
 
-// const url =
-//   "https://dzone.com/articles/java-11-to-21-a-visual-guide-for-seamless-migratio";
-
-// const url =
-//   "https://dzone.com/articles/server-side-rendering-with-spring-boot";
-
 async function createEpub(url: string) {
   console.log("Create epub for %s", url);
 
@@ -177,7 +180,7 @@ async function createEpub(url: string) {
   const workDir = path.join("workspaces", docId);
   createDir(workDir);
 
-  await fetchContent(workDir, url);
+  await fetchContent(workDir, url, true);
 
   const result = await parseDocument(workDir, url);
   if (result != null) {
@@ -187,11 +190,38 @@ async function createEpub(url: string) {
   }
 }
 
+async function callFirefox(url: string): Promise<string> {
+  const profile = '/Users/MyUserName/Library/Application Support/Firefox/Profiles/0bge0mht.SeleniumTest';
+  const options = new firefox.Options()
+    //.addArguments("-P", "SeleniumTest")
+    .setProfile(profile);
+    console.log(options);
+
+    const driver = await new Builder().forBrowser('firefox')
+    .setFirefoxOptions(options)
+    .build();
+
+    //console.log(driver);
+
+    await driver.get(url);
+    console.log(driver);
+    const page_source = await driver.getPageSource();
+
+    
+    // console.log(page_source);
+    // await driver.wait();
+    await driver.sleep(5000);
+  
+    await driver.quit();
+  
+    return page_source;
+}
+
 if (import.meta.main && Deno.args.length > 0) {
   // TODO Validate url
   const url = Deno.args.at(0);
   if (url) {
-    await createEpub(url);
+   await callFirefox(url);
   }
 }
 if (import.meta.main && Deno.args.length == 0) {

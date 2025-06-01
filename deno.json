@@ -5,9 +5,10 @@
   "imports": {
     "@mozilla/readability": "npm:@mozilla/readability@^0.6.0",
     "@std/assert": "jsr:@std/assert@1",
+    "@std/cli/parse-args":"jsr:@std/cli/parse-args",
     "jsdom": "npm:jsdom@^25.0.1",
-    "selenium-webdriver": "npm:selenium-webdriver@^4.32.0",
-    "selenium-webdriver/firefox": "npm:selenium-webdriver@^4.32.0/firefox.js"
+    "selenium-webdriver": "npm:selenium-webdriver@^4.33.0",
+    "selenium-webdriver/firefox": "npm:selenium-webdriver@^4.33.0/firefox.js"
 
   }
 }

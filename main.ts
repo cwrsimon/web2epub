@@ -5,6 +5,8 @@ import { JSDOM } from "jsdom";
 import { stringify } from "jsr:@std/yaml";
 import {Builder} from "selenium-webdriver";
 import * as firefox from "selenium-webdriver/firefox";
+import { parseArgs } from "jsr:@std/cli/parse-args";
+import os from 'node:os';
 
 type ParseResult = {
   title: string;
@@ -86,7 +88,7 @@ async function generateEpub(workdir: string, docId: string): Promise<boolean> {
   return true;
 }
 
-async function fetchContent(workDir: string, url: string, firefox: boolean) {
+async function fetchContent(workDir: string, url: string, firefox: boolean, profileUrl: string) {
   const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
 
   const contentPresent = await fileExists(rawContentFile);
@@ -95,7 +97,7 @@ async function fetchContent(workDir: string, url: string, firefox: boolean) {
     return;
   }
   if (firefox) {
-    const body = await callFirefox(url);
+    const body = await callFirefox(url, profileUrl);
     const encoder = new TextEncoder(); 
       await Deno.writeFile(rawContentFile, encoder.encode(body));
 
@@ -171,7 +173,7 @@ async function generateContent(
   await Deno.writeFile(extractedContentFile, bytes);
 }
 
-async function createEpub(url: string) {
+async function createEpub(url: string, flags: { [x: string]: unknown; profile?: string | undefined; profileUrl?: string | undefined; firefox: boolean; help: boolean; _: Array<string | number>; }) {
   console.log("Create epub for %s", url);
 
   createDir("epubs");
@@ -180,7 +182,7 @@ async function createEpub(url: string) {
   const workDir = path.join("workspaces", docId);
   createDir(workDir);
 
-  await fetchContent(workDir, url, true);
+  await fetchContent(workDir, url, flags.firefox, flags.profileUrl ? flags.profileUrl : "");
 
   const result = await parseDocument(workDir, url);
   if (result != null) {
@@ -188,12 +190,11 @@ async function createEpub(url: string) {
     generateMetadata(workDir, result);
     await generateEpub(workDir, docId);
   }
+  console.log("Done.");
 }
 
-async function callFirefox(url: string): Promise<string> {
-  const profile = '/Users/MyUserName/Library/Application Support/Firefox/Profiles/0bge0mht.SeleniumTest';
+async function callFirefox(url: string, profile: string): Promise<string> {
   const options = new firefox.Options()
-    //.addArguments("-P", "SeleniumTest")
     .setProfile(profile);
     console.log(options);
 
@@ -206,34 +207,54 @@ async function callFirefox(url: string): Promise<string> {
     await driver.get(url);
     console.log(driver);
     const page_source = await driver.getPageSource();
-
-    
-    // console.log(page_source);
     // await driver.wait();
     await driver.sleep(5000);
   
     await driver.quit();
-  
+    console.log("Hier?");
     return page_source;
 }
 
-if (import.meta.main && Deno.args.length > 0) {
-  // TODO Validate url
-  const url = Deno.args.at(0);
-  if (url) {
-   await callFirefox(url);
+async function findProfile(name: string): Promise<string|undefined> {
+let profiles = os.homedir();
+if (os.platform() == 'darwin') {
+  profiles = path.join(os.homedir(), "Library","Application Support", "Firefox/Profiles");;
+}
+console.log(profiles);
+
+let profileDir:string|undefined = undefined;
+for await (const dirEntry of Deno.readDir(profiles)) {
+  if (flags.profile && dirEntry.isDirectory && dirEntry.name.endsWith(flags.profile)) {
+    profileDir = path.join(profiles, dirEntry.name);
   }
 }
-if (import.meta.main && Deno.args.length == 0) {
+return profileDir;
+}
+
+const flags = parseArgs(Deno.args, {
+  boolean: ["help", "firefox"],
+  string: ["profile", "profileUrl"],
+});
+if (flags.firefox && flags.profile && !flags.profileUrl) {
+  flags["profileUrl"] = await findProfile(flags.profile);
+}
+console.log(flags);
+
+
+if (import.meta.main && flags._.length > 0) {
+  // TODO Validate url
+  const url = flags._[0].toString();
+  if (url) {
+   await createEpub(url, flags);
+  }
+}
+if (import.meta.main && flags._.length == 0) {
   const stdinContent = await readAll(Deno.stdin);
   const response = new TextDecoder().decode(stdinContent).split("\n");
   for (const line of response) {
     if (line) {
-      await createEpub(line);
+      await createEpub(line, flags);
     }
   }
-  // response.forEach(async (line) => {
-
-  // });
-  //response.forEach( line -> );
 }
+

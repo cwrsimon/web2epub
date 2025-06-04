@@ -3,10 +3,10 @@ import { readAll } from "jsr:@std/io";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 import { stringify } from "jsr:@std/yaml";
-import {Builder} from "selenium-webdriver";
+import { Builder } from "selenium-webdriver";
 import * as firefox from "selenium-webdriver/firefox";
 import { parseArgs } from "jsr:@std/cli/parse-args";
-import os from 'node:os';
+import os from "node:os";
 
 type ParseResult = {
   title: string;
@@ -88,7 +88,12 @@ async function generateEpub(workdir: string, docId: string): Promise<boolean> {
   return true;
 }
 
-async function fetchContent(workDir: string, url: string, firefox: boolean, profileUrl: string) {
+async function fetchContent(
+  workDir: string,
+  url: string,
+  firefox: boolean,
+  profileUrl: string,
+) {
   const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
 
   const contentPresent = await fileExists(rawContentFile);
@@ -98,8 +103,8 @@ async function fetchContent(workDir: string, url: string, firefox: boolean, prof
   }
   if (firefox) {
     const body = await callFirefox(url, profileUrl);
-    const encoder = new TextEncoder(); 
-      await Deno.writeFile(rawContentFile, encoder.encode(body));
+    const encoder = new TextEncoder();
+    await Deno.writeFile(rawContentFile, encoder.encode(body));
 
     return;
   }
@@ -173,7 +178,17 @@ async function generateContent(
   await Deno.writeFile(extractedContentFile, bytes);
 }
 
-async function createEpub(url: string, flags: { [x: string]: unknown; profile?: string | undefined; profileUrl?: string | undefined; firefox: boolean; help: boolean; _: Array<string | number>; }) {
+async function createEpub(
+  url: string,
+  flags: {
+    [x: string]: unknown;
+    profile?: string | undefined;
+    profileUrl?: string | undefined;
+    firefox: boolean;
+    help: boolean;
+    _: Array<string | number>;
+  },
+) {
   console.log("Create epub for %s", url);
 
   createDir("epubs");
@@ -182,7 +197,12 @@ async function createEpub(url: string, flags: { [x: string]: unknown; profile?: 
   const workDir = path.join("workspaces", docId);
   createDir(workDir);
 
-  await fetchContent(workDir, url, flags.firefox, flags.profileUrl ? flags.profileUrl : "");
+  await fetchContent(
+    workDir,
+    url,
+    flags.firefox,
+    flags.profileUrl ? flags.profileUrl : "",
+  );
 
   const result = await parseDocument(workDir, url);
   if (result != null) {
@@ -196,58 +216,71 @@ async function createEpub(url: string, flags: { [x: string]: unknown; profile?: 
 async function callFirefox(url: string, profile: string): Promise<string> {
   const options = new firefox.Options()
     .setProfile(profile);
-    console.log(options);
 
-    const driver = await new Builder().forBrowser('firefox')
+  const driver = await new Builder().forBrowser("firefox")
     .setFirefoxOptions(options)
     .build();
 
-    //console.log(driver);
+  await driver.get(url);
 
-    await driver.get(url);
-    console.log(driver);
-    const page_source = await driver.getPageSource();
-    // await driver.wait();
-    await driver.sleep(5000);
-  
-    await driver.quit();
-    console.log("Hier?");
-    return page_source;
+  const page_source = await driver.getPageSource();
+  // await driver.wait();
+  await driver.sleep(2000);
+
+  await driver.quit();
+
+  return page_source;
 }
 
-async function findProfile(name: string): Promise<string|undefined> {
-let profiles = os.homedir();
-if (os.platform() == 'darwin') {
-  profiles = path.join(os.homedir(), "Library","Application Support", "Firefox/Profiles");;
-}
-console.log(profiles);
-
-let profileDir:string|undefined = undefined;
-for await (const dirEntry of Deno.readDir(profiles)) {
-  if (flags.profile && dirEntry.isDirectory && dirEntry.name.endsWith(flags.profile)) {
-    profileDir = path.join(profiles, dirEntry.name);
+async function findProfile(name: string): Promise<string | undefined> {
+  let profiles = os.homedir();
+  if (os.platform() == "darwin") {
+    profiles = path.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "Firefox/Profiles",
+    );
+  } else if (os.platform() == "win32") {
+    profiles = path.join(
+      os.homedir(),
+      "AppData",
+      "Local",
+      "Mozilla",
+      "Firefox/Profiles",
+    );
   }
-}
-return profileDir;
+
+  let profileDir: string | undefined = undefined;
+  for await (const dirEntry of Deno.readDir(profiles)) {
+    if (flags.profile && dirEntry.isDirectory && dirEntry.name.endsWith(name)) {
+      profileDir = path.join(profiles, dirEntry.name);
+    }
+  }
+  // On Windows this is the expected file dir syntax by Geckodriver
+  if (os.platform() == "win32") {
+    profileDir = profileDir?.replaceAll("\\", "/");
+  }
+  return profileDir;
 }
 
 const flags = parseArgs(Deno.args, {
   boolean: ["help", "firefox"],
   string: ["profile", "profileUrl"],
 });
+
 if (flags.firefox && flags.profile && !flags.profileUrl) {
   flags["profileUrl"] = await findProfile(flags.profile);
 }
-console.log(flags);
-
 
 if (import.meta.main && flags._.length > 0) {
   // TODO Validate url
   const url = flags._[0].toString();
   if (url) {
-   await createEpub(url, flags);
+    await createEpub(url, flags);
   }
 }
+
 if (import.meta.main && flags._.length == 0) {
   const stdinContent = await readAll(Deno.stdin);
   const response = new TextDecoder().decode(stdinContent).split("\n");
@@ -257,4 +290,3 @@ if (import.meta.main && flags._.length == 0) {
     }
   }
 }
-

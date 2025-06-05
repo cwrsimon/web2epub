@@ -21,6 +21,35 @@ type ParseResult = {
   publishedTime: string;
 };
 
+class SeleniumFirefoxDownloader {
+  seleniumDriver: any = undefined;
+  options: any = undefined;
+
+  constructor(profile: string) {
+    this.options = new firefox.Options()
+      .setProfile(profile);
+  }
+
+  async fetchUrl(url: string): Promise<string | undefined> {
+    if (!this.seleniumDriver) {
+      this.seleniumDriver = await new Builder().forBrowser("firefox")
+        .setFirefoxOptions(this.options)
+        .build();
+    }
+    await this.seleniumDriver.get(url);
+
+    return await this.seleniumDriver.getPageSource();
+  }
+
+  async destructor() {
+    if (this.seleniumDriver) {
+      await this.seleniumDriver.quit();
+    }
+  }
+}
+
+let firefoxDownloader: SeleniumFirefoxDownloader;
+
 const EXTRACTED_HTML_FILENAME = "extracted.html";
 const RAW_HTML_FILENAME = "document-raw.html";
 const RAW_METADATA_FILENAME = "metadata-raw.yaml";
@@ -92,7 +121,6 @@ async function fetchContent(
   workDir: string,
   url: string,
   firefox: boolean,
-  profileUrl: string,
 ) {
   const rawContentFile = path.join(workDir, RAW_HTML_FILENAME);
 
@@ -102,7 +130,7 @@ async function fetchContent(
     return;
   }
   if (firefox) {
-    const body = await callFirefox(url, profileUrl);
+    const body = await callFirefox(url);
     const encoder = new TextEncoder();
     await Deno.writeFile(rawContentFile, encoder.encode(body));
 
@@ -201,7 +229,6 @@ async function createEpub(
     workDir,
     url,
     flags.firefox,
-    flags.profileUrl ? flags.profileUrl : "",
   );
 
   const result = await parseDocument(workDir, url);
@@ -213,26 +240,17 @@ async function createEpub(
   console.log("Done.");
 }
 
-async function callFirefox(url: string, profile: string): Promise<string> {
-  const options = new firefox.Options()
-    .setProfile(profile);
-
-  const driver = await new Builder().forBrowser("firefox")
-    .setFirefoxOptions(options)
-    .build();
-
-  await driver.get(url);
-
-  const page_source = await driver.getPageSource();
-  // await driver.wait();
-  await driver.sleep(2000);
-
-  await driver.quit();
-
-  return page_source;
+async function callFirefox(url: string): Promise<string> {
+  if (firefoxDownloader) {
+    const fetchedContent = await firefoxDownloader.fetchUrl(url);
+    if (fetchedContent) {
+      return fetchedContent;
+    }
+  }
+  return "";
 }
 
-async function findProfile(name: string): Promise<string | undefined> {
+async function findFirefoxProfile(name: string): Promise<string | undefined> {
   let profiles = os.homedir();
   if (os.platform() == "darwin") {
     profiles = path.join(
@@ -270,7 +288,11 @@ const flags = parseArgs(Deno.args, {
 });
 
 if (flags.firefox && flags.profile && !flags.profileUrl) {
-  flags["profileUrl"] = await findProfile(flags.profile);
+  flags["profileUrl"] = await findFirefoxProfile(flags.profile);
+}
+
+if (flags["profileUrl"]) {
+  firefoxDownloader = new SeleniumFirefoxDownloader(flags["profileUrl"]);
 }
 
 if (import.meta.main && flags._.length > 0) {
@@ -289,4 +311,9 @@ if (import.meta.main && flags._.length == 0) {
       await createEpub(line, flags);
     }
   }
+}
+
+// cleanup
+if (firefoxDownloader) {
+  await firefoxDownloader.destructor();
 }

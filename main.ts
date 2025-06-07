@@ -263,7 +263,7 @@ async function findFirefoxProfile(name: string): Promise<string | undefined> {
     profiles = path.join(
       os.homedir(),
       "AppData",
-      "Local",
+      "Roaming",
       "Mozilla",
       "Firefox/Profiles",
     );
@@ -274,10 +274,6 @@ async function findFirefoxProfile(name: string): Promise<string | undefined> {
     if (flags.profile && dirEntry.isDirectory && dirEntry.name.endsWith(name)) {
       profileDir = path.join(profiles, dirEntry.name);
     }
-  }
-  // On Windows this is the expected file dir syntax by Geckodriver
-  if (os.platform() == "win32") {
-    profileDir = profileDir?.replaceAll("\\", "/");
   }
   return profileDir;
 }
